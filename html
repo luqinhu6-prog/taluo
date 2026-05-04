@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>塔罗健康占卜</title>
+<style>
+  :root {
+    --bg: #0a0a16;
+    --card-bg: #1a1035;
+    --gold: #c9a95c;
+    --gold-light: #e0c97f;
+    --purple: #6b3fa0;
+    --text: #d4d4e0;
+    --accent: #7eb8da;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  #bgCanvas {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0;
+  }
+  .container {
+    position: relative; z-index: 1;
+    max-width: 900px; margin: 0 auto; padding: 24px 16px 60px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+
+  /* Header */
+  .header { text-align: center; margin: 20px 0 10px; }
+  .header h1 {
+    font-size: clamp(24px, 5vw, 40px);
+    background: linear-gradient(135deg, var(--gold), var(--gold-light), var(--gold));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header .subtitle {
+    color: #8888aa; font-size: 14px; margin-top: 6px; letter-spacing: 2px;
+  }
+  .header .emoji-deco { font-size: 32px; display: block; margin-bottom: 4px;
+    -webkit-text-fill-color: initial; }
+
+  /* Spread selection */
+  .spread-select { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin: 20px 0; }
+  .spread-btn {
+    padding: 12px 24px; border-radius: 50px; border: 1px solid var(--gold);
+    background: transparent; color: var(--gold); cursor: pointer;
+    font-size: 15px; letter-spacing: 1px;
+    transition: all 0.3s; font-family: inherit;
+  }
+  .spread-btn:hover, .spread-btn.active {
+    background: rgba(201, 169, 92, 0.15); box-shadow: 0 0 20px rgba(201, 169, 92, 0.2);
+  }
+  .spread-btn.active { border-color: var(--gold-light); }
+
+  /* Card area */
+  .card-area {
+    display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;
+    margin: 24px 0; min-height: 280px; align-items: center;
+  }
+
+  /* 3D Card */
+  .card-scene { width: 160px; height: 240px; perspective: 800px; }
+  .card {
+    width: 100%; height: 100%; position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+  }
+  .card.flipped { transform: rotateY(180deg); }
+  .card-face {
+    position: absolute; width: 100%; height: 100%; backface-visibility: hidden;
+    border-radius: 14px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border: 2px solid var(--gold);
+  }
+
+  /* Card back */
+  .card-back {
+    background: linear-gradient(135deg, #1a1040, #2d1860, #1a1040);
+    overflow: hidden;
+  }
+  .card-back::before {
+    content: ''; position: absolute; inset: 8px; border-radius: 8px;
+    border: 1px solid rgba(201, 169, 92, 0.4);
+    background: repeating-conic-gradient(
+      rgba(201, 169, 92, 0.08) 0% 5%, transparent 5% 10%
+    ) 50%;
+  }
+  .card-back .star-icon {
+    font-size: 48px; position: relative; z-index: 1; filter: drop-shadow(0 0 8px rgba(201,169,92,0.5));
+  }
+  .card-back .tap-hint {
+    position: relative; z-index: 1; color: var(--gold); font-size: 12px;
+    margin-top: 8px; letter-spacing: 1px; opacity: 0.7;
+  }
+
+  /* Card front */
+  .card-front {
+    background: linear-gradient(145deg, #150d30, #1f1340, #150d30);
+    transform: rotateY(180deg); padding: 16px;
+    justify-content: flex-start; gap: 8px;
+  }
+  .card-front .card-icon { font-size: 44px; margin-top: 8px; }
+  .card-front .card-name {
+    color: var(--gold); font-size: 18px; font-weight: bold; letter-spacing: 1px;
+  }
+  .card-front .card-name-en {
+    color: #8888aa; font-size: 11px; letter-spacing: 1px;
+  }
+  .card-front .card-position {
+    font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    margin-top: 4px; letter-spacing: 1px;
+  }
+  .card-front .pos-upright { background: rgba(126, 184, 218, 0.2); color: var(--accent); }
+  .card-front .pos-reversed { background: rgba(220, 130, 130, 0.2); color: #dc8282; }
+
+  /* Interpretation panel */
+  .interpretation {
+    display: none; max-width: 600px; width: 100%;
+    background: rgba(26, 16, 53, 0.8); border: 1px solid rgba(201, 169, 92, 0.3);
+    border-radius: 16px; padding: 24px; margin-top: 8px;
+    animation: fadeIn 0.6s ease;
+  }
+  .interpretation.show { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .interp-title { color: var(--gold); font-size: 20px; margin-bottom: 6px; }
+  .interp-subtitle { color: #8888aa; font-size: 12px; margin-bottom: 16px; }
+  .interp-section { margin-bottom: 14px; }
+  .interp-section h3 {
+    color: var(--accent); font-size: 14px; margin-bottom: 4px; letter-spacing: 1px;
+  }
+  .interp-section p { color: #c0c0d0; font-size: 14px; line-height: 1.7; }
+  .interp-tip {
+    background: rgba(201, 169, 92, 0.1); border-left: 2px solid var(--gold);
+    padding: 10px 14px; border-radius: 0 8px 8px 0; margin-top: 12px;
+    font-size: 13px; color: var(--gold-light);
+  }
+
+  /* Actions */
+  .actions { margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .btn-primary {
+    padding: 12px 28px; border-radius: 50px; border: none;
+    background: linear-gradient(135deg, var(--purple), #8b5fc0);
+    color: #fff; cursor: pointer; font-size: 15px; letter-spacing: 1px;
+    font-family: inherit; transition: all 0.3s;
+  }
+  .btn-primary:hover { box-shadow: 0 0 24px rgba(107, 63, 160, 0.4); transform: translateY(-1px); }
+  .btn-outline {
+    padding: 12px 28px; border-radius: 50px; border: 1px solid var(--gold);
+    background: transparent; color: var(--gold); cursor: pointer;
+    font-size: 15px; letter-spacing: 1px; font-family: inherit; transition: all 0.3s;
+  }
+  .btn-outline:hover { background: rgba(201, 169, 92, 0.1); }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 600px) {
+    .card-scene { width: 120px; height: 180px; }
+    .card-front .card-icon { font-size: 32px; }
+    .card-front .card-name { font-size: 15px; }
+    .card-area { gap: 12px; min-height: 220px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+
+<div class="container">
+  <div class="header">
+    <span class="emoji-deco">🔮</span>
+    <h1>塔罗健康占卜</h1>
+    <p class="subtitle">抽一张牌，听听身体想对你说的话</p>
+  </div>
+
+  <div class="spread-select" id="spreadSelect">
+    <button class="spread-btn active" data-spread="single">✨ 单张牌</button>
+    <button class="spread-btn" data-spread="three">🃏 三张牌</button>
+    <button class="spread-btn" data-spread="choice">⚖️ 健康选择</button>
+  </div>
+
+  <div class="card-area" id="cardArea"></div>
+
+  <div class="interpretation" id="interpretation"></div>
+
+  <div class="actions" id="actions">
+    <button class="btn-primary hidden" id="btnDraw" onclick="startDraw()">🎴 开始抽牌</button>
+    <button class="btn-outline hidden" id="btnReset" onclick="resetAll()">🔄 重新占卜</button>
+  </div>
+</div>
+
+<script>
+// ==================== CARD DATA ====================
+const tarotDeck = [
+  { id: 0, name: '愚者', nameEn: 'The Fool', icon: '🌟',
+    upright: '新的健康旅程即将开启。这是一个尝试新运动、新饮食方式的绝佳时机。保持开放心态，但别忘了做个体检再出发。',
+    reversed: '对健康问题过于掉以轻心。是否忽略了某些身体信号？不要因为怕麻烦而推迟就医检查。',
+    tip: '每年做一次全面体检，是给自己最好的"冒险保险"。' },
+  { id: 1, name: '魔术师', nameEn: 'The Magician', icon: '🪄',
+    upright: '你完全有能力掌控自己的健康。制定健身计划、学习营养知识，将资源转化为行动力的时刻到了。',
+    reversed: '空有想法缺乏行动。买好的健身卡落灰了吗？能力被浪费，需要重新聚焦健康目标。',
+    tip: '善用医保卡里的个人账户余额，购买健身器材或体检项目。' },
+  { id: 2, name: '女祭司', nameEn: 'The High Priestess', icon: '🌙',
+    upright: '静下来倾听身体的声音。某些不适可能是潜意识在提醒你放慢节奏。冥想和充足睡眠是最好的良药。',
+    reversed: '忽视了直觉的警告信号。身体在用疲惫、失眠对你发出抗议，不要再视而不见。',
+    tip: '心理健康与身体健康同等重要，关注你的情绪状态。' },
+  { id: 3, name: '皇后', nameEn: 'The Empress', icon: '👑',
+    upright: '拥抱自我关爱的力量。好好吃饭、好好睡觉、享受按摩和水疗——这不是奢侈，是投资自己的健康。',
+    reversed: '过度放纵或忽视自我照顾。暴饮暴食或完全不顾形象都是失衡的表现，找回中间的节律。',
+    tip: '女性朋友记得定期做乳腺和宫颈筛查，医保可以报销大部分费用。' },
+  { id: 4, name: '皇帝', nameEn: 'The Emperor', icon: '🏛️',
+    upright: '建立规律的健康作息。定时起居、规律运动、稳定饮食结构。铁的纪律铸就强健体魄。',
+    reversed: '过于僵化或失去控制。要么被严苛的健康计划压垮，要么完全失控。灵活调整才是长久之道。',
+    tip: '了解你的医保政策条款，像管理军队一样管理你的健康档案。' },
+  { id: 5, name: '教皇', nameEn: 'The Hierophant', icon: '📜',
+    upright: '寻求专业的医疗指导。不要轻信偏方或网络诊断，去正规医院咨询医生，遵医嘱是最明智的选择。',
+    reversed: '对权威医疗体系失去信任，盲目尝试各种偏方或替代疗法。回归科学，相信专业。',
+    tip: '选择正规医保定点医院就医，既可以保证质量又能享受报销。' },
+  { id: 6, name: '恋人', nameEn: 'The Lovers', icon: '💕',
+    upright: '身心和谐统一的时刻。你的情感关系正在滋养你的健康，爱与支持是最好的免疫力增强剂。',
+    reversed: '身心分离，情感压力影响了身体健康。关系中的焦虑正在消耗你的能量，需要做出健康的选择。',
+    tip: '伴侣可以互相绑定医保家庭账户，关爱彼此的健康。' },
+  { id: 7, name: '战车', nameEn: 'The Chariot', icon: '⚔️',
+    upright: '你正在战胜疾病的道路上全力前进。意志力是最强大的武器，保持积极的康复信念，胜利在望。',
+    reversed: '与健康问题的斗争让你筋疲力尽。不要硬撑，适当休战和调整策略也是战斗的一部分。',
+    tip: '大病医疗保险是你对抗重大疾病的"战车"，确保保障充足。' },
+  { id: 8, name: '力量', nameEn: 'Strength', icon: '🦁',
+    upright: '内在的力量远远超出你的想象。面对健康挑战时，温柔而坚定的态度比蛮力更有效。',
+    reversed: '感到虚弱和无助，对自己的康复能力失去信心。请记住，脆弱不是失败，寻求帮助是一种勇气。',
+    tip: '康复期的康复理疗项目很多在医保报销范围内，不要因为费用放弃治疗。' },
+  { id: 9, name: '隐者', nameEn: 'The Hermit', icon: '🏔️',
+    upright: '需要一段独处和休养的时间。减少社交、放慢节奏，把注意力从外界转向内在的修复。',
+    reversed: '过度孤立自己。长期的社交隔绝会影响心理健康，人是需要温度和连接的生物。',
+    tip: '适当休假调养不是偷懒，是预防过劳疾病的有效方式。' },
+  { id: 10, name: '命运之轮', nameEn: 'Wheel of Fortune', icon: '🎡',
+    upright: '健康状况正在向好的方向转折。一个周期即将结束，新的健康运势正在上升，抓住这个契机。',
+    reversed: '健康运势低迷期。但这只是暂时的循环，不要灰心。现在做的每一分努力都在为上升期做准备。',
+    tip: '人生无常，配置好重疾险和医疗险，为未知的转折做好准备。' },
+  { id: 11, name: '正义', nameEn: 'Justice', icon: '⚖️',
+    upright: '你的健康权益得到保障的时刻。合理使用医保、争取应得的医疗服务，公平的健康资源分配在等待你。',
+    reversed: '遇到了医疗资源分配不公或保险理赔纠纷。不要放弃维护自己的权益，据理力争。',
+    tip: '了解医疗纠纷处理流程和患者权益保护法，你的健康权利受法律保护。' },
+  { id: 12, name: '倒吊人', nameEn: 'The Hanged Man', icon: '🙃',
+    upright: '换个角度看自己的健康问题。也许你需要尝试一种完全不同的养生方式，停下来重新审视。',
+    reversed: '被困在不健康的生活模式中无法自拔。你知道需要改变，但迟迟不愿行动。放手旧习惯吧。',
+    tip: '有时候"停下来"比"继续冲"更需要勇气，你的身体会感谢你。' },
+  { id: 13, name: '死神', nameEn: 'Death', icon: '🦋',
+    upright: '告别不健康的生活方式，迎来全新的自己。戒烟、戒酒、告别熬夜——旧模式的结束是新生的开始。',
+    reversed: '抗拒改变，死死抓住有害的习惯不放。害怕失去让你停滞不前，但改变已在门口敲门。',
+    tip: '戒除不良习惯不仅能改善健康，还能降低商业健康保险的保费。' },
+  { id: 14, name: '节制', nameEn: 'Temperance', icon: '🌊',
+    upright: '找到健康生活的黄金平衡点。不极端节食也不暴饮暴食，适度运动而非过度消耗。和谐是关键词。',
+    reversed: '生活失衡导致健康问题。工作与休息、饮食与运动、付出与收获都需要重新校准。',
+    tip: '饮食均衡、作息规律是最省钱的"医保"，预防永远大于治疗。' },
+  { id: 15, name: '恶魔', nameEn: 'The Devil', icon: '😈',
+    upright: '警示：某些成瘾行为正在控制你的健康。烟酒、糖分、电子屏幕——认清什么在消耗你的身体。',
+    reversed: '正在挣脱不健康习惯的束缚。你已看到问题所在，现在是斩断枷锁的关键时刻。',
+    tip: '很多医院开设了戒烟戒酒门诊，部分项目可以使用医保。' },
+  { id: 16, name: '高塔', nameEn: 'The Tower', icon: '⚡',
+    upright: '突发健康事件让你措手不及。一场疾病或意外打破了平静的生活，但危机中也蕴含着重建的机会。',
+    reversed: '对即将到来的健康危机视而不见。你一直在逃避体检或复查，不要等到"爆雷"才后悔。',
+    tip: '急诊和住院治疗请保留好所有票据，了解医保报销流程和期限。' },
+  { id: 17, name: '星星', nameEn: 'The Star', icon: '⭐',
+    upright: '康复的希望之光照耀着你。身体正在慢慢恢复，保持信心和耐心，最好的疗愈正在发生。',
+    reversed: '对康复失去希望，陷入悲观和绝望。但希望从未离开，只是你暂时看不到它。',
+    tip: '康复期间保持积极心态，很多医院有免费的心理支持服务可以辅助治疗。' },
+  { id: 18, name: '月亮', nameEn: 'The Moon', icon: '🌑',
+    upright: '关注你的心理健康。焦虑、抑郁、失眠——这些看不见的阴影同样需要正视和治疗。',
+    reversed: '心理困扰正在消散，隐藏在暗处的恐惧和焦虑正在被光照亮。你不再需要独自面对黑暗。',
+    tip: '心理健康咨询正在逐步纳入医保范围，不要害怕寻求专业心理帮助。' },
+  { id: 19, name: '太阳', nameEn: 'The Sun', icon: '☀️',
+    upright: '充满活力和生命力的健康状态！精力充沛、心情明媚，这是你最健康的时刻，尽情享受和分享快乐。',
+    reversed: '暂时阴霾，但阳光从未消失。可能有一些小病痛让你情绪低落，但很快会雨过天晴。',
+    tip: '趁着健康状态好，建立运动习惯并考虑配置商业保险锁定低费率。' },
+  { id: 20, name: '审判', nameEn: 'Judgement', icon: '📯',
+    upright: '觉醒的时刻到了。重新审视自己的生活方式和健康价值观，做出彻底的改变和升级。',
+    reversed: '逃避对自己健康的责任。体检报告被压在抽屉最深处，但逃避不能解决问题。',
+    tip: '定期复查和体检结果要建档管理，这是对自己健康负责的第一步。' },
+  { id: 21, name: '世界', nameEn: 'The World', icon: '🌍',
+    upright: '身心灵达到了完美的和谐统一。这是健康的最高境界——你不仅仅是没有生病，而是真正在蓬勃生长。',
+    reversed: '接近健康的圆满但还差一步。某个方面的健康问题尚待解决，不要功亏一篑。',
+    tip: '全面健康包括身体、心理、社交和财务健康，医保是你整体健康规划的重要一环。' }
+];
+
+// ==================== STATE ====================
+let currentSpread = 'single';
+let drawnCards = [];
+let flippedCards = new Set();
+let spreadLabel = '';
+
+// ==================== PARTICLE BACKGROUND ====================
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+for (let i = 0; i < 80; i++) {
+  particles.push({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    r: Math.random() * 1.5 + 0.5,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: -Math.random() * 0.4 - 0.1,
+    alpha: Math.random() * 0.6 + 0.2
+  });
+}
+
+function animateParticles() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const p of particles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.x < 0) p.x = canvas.width;
+    if (p.x > canvas.width) p.x = 0;
+    if (p.y < 0) p.y = canvas.height;
+    if (p.y > canvas.height) { p.y = 0; p.x = Math.random() * canvas.width; }
+    ctx.fillStyle = `rgba(201,169,92,${p.alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  requestAnimationFrame(animateParticles);
+}
+animateParticles();
+
+// ==================== SPREAD SELECTION ====================
+document.querySelectorAll('.spread-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.spread-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    currentSpread = this.dataset.spread;
+    resetAll();
+  });
+});
+
+// ==================== DRAW CARDS ====================
+function shuffleDeck() {
+  const arr = [...tarotDeck];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function startDraw() {
+  const shuffled = shuffleDeck();
+  flippedCards = new Set();
+  document.getElementById('interpretation').classList.remove('show');
+  document.getElementById('interpretation').innerHTML = '';
+
+  if (currentSpread === 'single') {
+    drawnCards = [shuffled[0]];
+    spreadLabel = '今日健康启示';
+  } else if (currentSpread === 'three') {
+    drawnCards = [shuffled[0], shuffled[1], shuffled[2]];
+    spreadLabel = '过去 · 现在 · 未来';
+  } else if (currentSpread === 'choice') {
+    drawnCards = [shuffled[0], shuffled[1]];
+    spreadLabel = '选项A  vs  选项B';
+  }
+
+  renderCards();
+  document.getElementById('btnDraw').classList.add('hidden');
+  document.getElementById('btnReset').classList.remove('hidden');
+}
+
+function renderCards() {
+  const area = document.getElementById('cardArea');
+  const labels = currentSpread === 'three' ? ['过去', '现在', '未来'] :
+                 currentSpread === 'choice' ? ['选项A', '选项B'] : ['今日启示'];
+
+  area.innerHTML = drawnCards.map((card, i) => {
+    const isRev = Math.random() < 0.3; // 30% chance reversed
+    card._reversed = isRev;
+    return `
+    <div class="card-scene" onclick="flipCard(${i})">
+      <div class="card" id="card${i}">
+        <div class="card-face card-back">
+          <span class="star-icon">🔮</span>
+          <span class="tap-hint">点击翻牌</span>
+        </div>
+        <div class="card-face card-front">
+          <span class="card-icon">${card.icon}</span>
+          <span class="card-name">${card.name}</span>
+          <span class="card-name-en">${card.nameEn}</span>
+          <span class="card-position ${isRev ? 'pos-reversed' : 'pos-upright'}">${isRev ? '逆位' : '正位'}</span>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:8px;color:#8888aa;font-size:12px;letter-spacing:1px;">${labels[i] || ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function flipCard(index) {
+  if (flippedCards.has(index)) return;
+  flippedCards.add(index);
+  document.getElementById('card' + index).classList.add('flipped');
+
+  // Show interpretation after short delay
+  setTimeout(() => showInterpretation(), 400);
+
+  // Check if all flipped
+  if (flippedCards.size === drawnCards.length) {
+    document.getElementById('btnReset').classList.remove('hidden');
+  }
+}
+
+function showInterpretation() {
+  const panel = document.getElementById('interpretation');
+  const labels = currentSpread === 'three' ? ['过去', '现在', '未来'] :
+                 currentSpread === 'choice' ? ['选项A', '选项B'] : ['今日启示'];
+
+  let html = '';
+  const flipped = [...flippedCards].sort();
+
+  if (currentSpread === 'single' && flipped.length === 1) {
+    const card = drawnCards[0];
+    html = singleCardHTML(card, '');
+  } else if (currentSpread === 'choice' && flipped.length === 2) {
+    html = `
+      <div class="interp-title">⚖️ 健康选择解读</div>
+      <div class="interp-subtitle">两张牌分别对应你的两个选择</div>
+      ${choiceCardHTML(drawnCards[0], '选项A')}
+      ${choiceCardHTML(drawnCards[1], '选项B')}
+    `;
+  } else if (currentSpread === 'three') {
+    html = `
+      <div class="interp-title">🃏 三张牌解读</div>
+      <div class="interp-subtitle">过去 · 现在 · 未来 —— 你的健康旅程</div>
+      ${flipped.map(i => singleCardHTML(drawnCards[i], labels[i])).join('')}
+    `;
+  } else if (currentSpread === 'choice' && flipped.length === 1) {
+    html = `<div class="interp-title">⚖️ 健康选择</div>
+            <div class="interp-subtitle">再点击另一张牌查看完整解读</div>`;
+  } else if (currentSpread === 'three' && flipped.length < 3) {
+    html = `<div class="interp-title">🃏 三张牌占卜</div>
+            <div class="interp-subtitle">继续点击剩余牌面查看完整解读（已揭示 ${flipped.length}/3）</div>
+            ${flipped.map(i => singleCardHTML(drawnCards[i], labels[i])).join('')}`;
+  }
+
+  panel.innerHTML = html;
+  panel.classList.add('show');
+}
+
+function singleCardHTML(card, label) {
+  const isRev = card._reversed;
+  return `
+    <div class="interp-section">
+      <h3>${label ? label + ' — ' : ''}${card.icon} ${card.name}（${isRev ? '逆位' : '正位'}）</h3>
+      <p>${isRev ? card.reversed : card.upright}</p>
+      <div class="interp-tip">💡 ${card.tip}</div>
+    </div>
+  `;
+}
+
+function choiceCardHTML(card, label) {
+  const isRev = card._reversed;
+  return `
+    <div class="interp-section">
+      <h3>${label}：${card.icon} ${card.name}（${isRev ? '逆位' : '正位'}）</h3>
+      <p>${isRev ? card.reversed : card.upright}</p>
+      <div class="interp-tip">💡 ${card.tip}</div>
+    </div>
+  `;
+}
+
+function resetAll() {
+  drawnCards = [];
+  flippedCards = new Set();
+  document.getElementById('cardArea').innerHTML = '';
+  document.getElementById('interpretation').classList.remove('show');
+  document.getElementById('interpretation').innerHTML = '';
+  document.getElementById('btnDraw').classList.remove('hidden');
+  document.getElementById('btnReset').classList.add('hidden');
+}
+
+// Init
+document.getElementById('btnDraw').classList.remove('hidden');
+</script>
+</body>
+</html>
